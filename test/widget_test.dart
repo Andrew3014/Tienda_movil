@@ -11,7 +11,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const BoutiqueApp());
+    await tester.pumpWidget(const BoutiqueApp(useAuth: false));
 
     expect(find.text('Mi Tienda Boutique'), findsOneWidget);
     expect(find.text('Cuenta de prueba'), findsOneWidget);

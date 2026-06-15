@@ -52,16 +52,26 @@ values
 Ir a `Project Settings > API` y copiar:
 
 - Project URL
-- anon public key
+- publishable key
 
 Luego se conectaran en Flutter como variables:
 
 ```text
 SUPABASE_URL=...
-SUPABASE_ANON_KEY=...
+SUPABASE_PUBLISHABLE_KEY=...
 ```
 
 No subir claves privadas ni service role key al repositorio.
+
+La app ya puede recibir estos valores por `--dart-define`:
+
+```bash
+flutter run \
+  --dart-define=SUPABASE_URL=https://pakfwasisthdpfbsqvef.supabase.co \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_JZ7rsQ2p3kfOSR9oUoEMmw_Xj1askQF
+```
+
+En Android Studio puedes abrir `Run > Edit Configurations` y agregar esos `Additional run args`.
 
 ## 6. Pruebas esperadas
 

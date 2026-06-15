@@ -1,11 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  const supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://pakfwasisthdpfbsqvef.supabase.co',
+  );
+  const supabasePublishableKey = String.fromEnvironment(
+    'SUPABASE_PUBLISHABLE_KEY',
+    defaultValue: 'sb_publishable_JZ7rsQ2p3kfOSR9oUoEMmw_Xj1askQF',
+  );
+
+  await Supabase.initialize(
+    url: supabaseUrl,
+    publishableKey: supabasePublishableKey,
+  );
+
   runApp(const BoutiqueApp());
 }
 
 class BoutiqueApp extends StatelessWidget {
-  const BoutiqueApp({super.key});
+  const BoutiqueApp({super.key, this.useAuth = true});
+
+  final bool useAuth;
 
   @override
   Widget build(BuildContext context) {
@@ -61,20 +80,338 @@ class BoutiqueApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const BoutiqueHomePage(),
+      home: useAuth ? const AuthGate() : const BoutiqueHomePage.demo(),
+    );
+  }
+}
+
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  final _supabase = Supabase.instance.client;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      stream: _supabase.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = _supabase.auth.currentSession;
+
+        if (session == null) {
+          return const LoginPage();
+        }
+
+        return FutureBuilder<TestAccount>(
+          future: _loadAccount(session.user),
+          builder: (context, accountSnapshot) {
+            if (accountSnapshot.connectionState != ConnectionState.done) {
+              return const _LoadingPage(message: 'Cargando perfil...');
+            }
+
+            if (accountSnapshot.hasError || !accountSnapshot.hasData) {
+              return _ProfileErrorPage(
+                email: session.user.email ?? 'usuario sin email',
+              );
+            }
+
+            return BoutiqueHomePage.authenticated(
+              account: accountSnapshot.data!,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<TestAccount> _loadAccount(User user) async {
+    final profile = await _supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (profile == null) {
+      throw StateError('El usuario no tiene fila en profiles.');
+    }
+
+    final role = AccountRoleParser.fromDatabase(profile['role'] as String?);
+
+    return TestAccount(
+      name: (profile['full_name'] as String?) ?? user.email ?? 'Usuario',
+      email: user.email ?? 'sin-email',
+      role: role,
+      description: role.description,
+    );
+  }
+}
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _emailController = TextEditingController(text: 'admin@mitienda.bo');
+  final _passwordController = TextEditingController();
+  final _supabase = Supabase.instance.client;
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await _supabase.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+    } on AuthException catch (error) {
+      setState(() => _error = error.message);
+    } catch (_) {
+      setState(() => _error = 'No se pudo iniciar sesion.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: _Surface(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0A0A0A),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.storefront,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Mi Tienda Boutique',
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              Text(
+                                'Ingreso con Supabase Auth',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: const Color(0xFF737373),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    TextField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Contrasena',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        ),
+                      ),
+                      onSubmitted: (_) => _isLoading ? null : _signIn(),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _error!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFB91C1C),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _isLoading ? null : _signIn,
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.login),
+                      label: Text(_isLoading ? 'Ingresando...' : 'Ingresar'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const BoutiqueHomePage.demo(),
+                                ),
+                              );
+                            },
+                      icon: const Icon(Icons.visibility),
+                      label: const Text('Continuar en modo demo'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingPage extends StatelessWidget {
+  const _LoadingPage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 14),
+            Text(message),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileErrorPage extends StatelessWidget {
+  const _ProfileErrorPage({required this.email});
+
+  final String email;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: _Surface(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.warning_amber, size: 42),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Falta el perfil del usuario',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'El usuario $email existe en Auth, pero todavia no tiene una fila en public.profiles con su rol.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => Supabase.instance.client.auth.signOut(),
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Volver al login'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
 class BoutiqueHomePage extends StatefulWidget {
-  const BoutiqueHomePage({super.key});
+  const BoutiqueHomePage.authenticated({
+    super.key,
+    required TestAccount account,
+  }) : _initialAccount = account,
+       _demoMode = false;
+
+  const BoutiqueHomePage.demo({super.key})
+    : _initialAccount = null,
+      _demoMode = true;
+
+  final TestAccount? _initialAccount;
+  final bool _demoMode;
 
   @override
   State<BoutiqueHomePage> createState() => _BoutiqueHomePageState();
 }
 
 class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
-  TestAccount _activeAccount = DemoData.accounts.first;
+  late TestAccount _activeAccount;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeAccount = widget._initialAccount ?? DemoData.accounts.first;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +421,7 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
     final dashboard = [
       _TopBar(
         account: _activeAccount,
+        demoMode: widget._demoMode,
         onAccountChanged: (account) => setState(() {
           _activeAccount = account;
         }),
@@ -164,9 +502,14 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.account, required this.onAccountChanged});
+  const _TopBar({
+    required this.account,
+    required this.demoMode,
+    required this.onAccountChanged,
+  });
 
   final TestAccount account;
+  final bool demoMode;
   final ValueChanged<TestAccount> onAccountChanged;
 
   @override
@@ -210,30 +553,33 @@ class _TopBar extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(
-            width: 310,
-            child: DropdownButtonFormField<TestAccount>(
-              initialValue: account,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Cuenta de prueba',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(8)),
-                ),
-                isDense: true,
-              ),
-              items: [
-                for (final item in DemoData.accounts)
-                  DropdownMenuItem(
-                    value: item,
-                    child: Text('${item.name} - ${item.role.label}'),
+          if (demoMode)
+            SizedBox(
+              width: 310,
+              child: DropdownButtonFormField<TestAccount>(
+                initialValue: account,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Cuenta de prueba',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(8)),
                   ),
-              ],
-              onChanged: (value) {
-                if (value != null) onAccountChanged(value);
-              },
-            ),
-          ),
+                  isDense: true,
+                ),
+                items: [
+                  for (final item in DemoData.accounts)
+                    DropdownMenuItem(
+                      value: item,
+                      child: Text('${item.name} - ${item.role.label}'),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) onAccountChanged(value);
+                },
+              ),
+            )
+          else
+            _SessionLabel(email: account.email),
           _RoleBadge(role: account.role),
           FilledButton.icon(
             onPressed: account.role.permissions.canTakeQrPayments
@@ -241,6 +587,45 @@ class _TopBar extends StatelessWidget {
                 : null,
             icon: const Icon(Icons.qr_code_2),
             label: const Text('Cobrar QR'),
+          ),
+          if (!demoMode)
+            OutlinedButton.icon(
+              onPressed: () => Supabase.instance.client.auth.signOut(),
+              icon: const Icon(Icons.logout),
+              label: const Text('Salir'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionLabel extends StatelessWidget {
+  const _SessionLabel({required this.email});
+
+  final String email;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 310,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        border: Border.all(color: const Color(0xFFE5E5E5)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.verified_user, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              email,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -1204,6 +1589,21 @@ extension AccountRoleInfo on AccountRole {
     };
   }
 
+  String get description {
+    return switch (this) {
+      AccountRole.admin =>
+        'Acceso total: usuarios, inventario, ventas, caja, reportes y configuracion.',
+      AccountRole.manager =>
+        'Gestiona ventas, inventario, caja y reportes, sin administrar roles criticos.',
+      AccountRole.seller =>
+        'Opera ventas rapidas, cobros QR y consulta catalogo disponible.',
+      AccountRole.inventory =>
+        'Actualiza prendas, variantes, tallas, colores y niveles de stock.',
+      AccountRole.customer =>
+        'Visualiza catalogo y sus propios pedidos, sin acceso operativo interno.',
+    };
+  }
+
   RolePermissions get permissions {
     return switch (this) {
       AccountRole.admin => const RolePermissions(
@@ -1232,6 +1632,21 @@ extension AccountRoleInfo on AccountRole {
         canViewReports: true,
       ),
       AccountRole.customer => const RolePermissions(),
+    };
+  }
+}
+
+class AccountRoleParser {
+  const AccountRoleParser._();
+
+  static AccountRole fromDatabase(String? value) {
+    return switch (value) {
+      'admin' => AccountRole.admin,
+      'manager' => AccountRole.manager,
+      'seller' => AccountRole.seller,
+      'inventory' => AccountRole.inventory,
+      'customer' => AccountRole.customer,
+      _ => AccountRole.customer,
     };
   }
 }

@@ -23,6 +23,7 @@ La version actual implementa una interfaz neutra inspirada en shadcn:
 
 - Paleta blanca, gris y negro con bordes sutiles.
 - Selector de cuenta de prueba.
+- Login real preparado con Supabase Auth.
 - Matriz visual de permisos por rol.
 - Panel de metricas.
 - Catalogo con productos de ejemplo.
@@ -106,8 +107,8 @@ Si Android Studio no reconoce Flutter, revisar que el SDK este configurado en `S
 3. Crear usuarios de prueba desde Authentication.
 4. Insertar cada usuario en `profiles` con el rol correspondiente.
 5. Guardar `SUPABASE_URL` y `SUPABASE_ANON_KEY`.
-6. Agregar `supabase_flutter` en Flutter.
-7. Conectar login real y reemplazar las cuentas demo.
+6. Ejecutar la app e iniciar sesion con las cuentas creadas.
+7. Mantener el modo demo solo para pruebas visuales locales.
 
 ## Proximas tareas
 
