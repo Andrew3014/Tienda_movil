@@ -26,9 +26,7 @@ Ir a `Authentication > Users > Add user` y crear:
 | Email | Rol en `profiles` |
 | --- | --- |
 | admin@mitienda.bo | admin |
-| gerente@mitienda.bo | manager |
 | ventas@mitienda.bo | seller |
-| stock@mitienda.bo | inventory |
 | cliente@mitienda.bo | customer |
 
 Puedes usar una contraseña temporal como `Demo123456!` durante desarrollo.
@@ -40,11 +38,11 @@ Despues de crear los usuarios, copiar el UUID de cada uno e insertar en `profile
 ```sql
 insert into public.profiles (id, full_name, role)
 values
-  ('UUID_ADMIN', 'Admin General', 'admin'),
-  ('UUID_GERENTE', 'Gerente Boutique', 'manager'),
-  ('UUID_VENTAS', 'Vendedora Caja', 'seller'),
-  ('UUID_STOCK', 'Encargado Stock', 'inventory'),
-  ('UUID_CLIENTE', 'Cliente Demo', 'customer');
+  ('8f38d94b-4a9f-4f34-b900-d42e4d0a811d', 'Administrador General', 'admin'),
+  ('37ffe5a9-ee15-4607-adc0-931b9edd4d4e', 'Vendedor Caja', 'seller'),
+  ('ac3b5a5e-962e-4285-9f2d-40d02ecc5cb1', 'Cliente Demo', 'customer')
+on conflict (id) do update
+set full_name = excluded.full_name, role = excluded.role;
 ```
 
 ## 5. Guardar credenciales para Flutter
@@ -77,6 +75,5 @@ En Android Studio puedes abrir `Run > Edit Configurations` y agregar esos `Addit
 
 - Cliente solo puede ver catalogo y pedidos propios.
 - Vendedor puede crear ventas y registrar pagos QR.
-- Inventario puede editar productos y variantes.
-- Gerente puede operar inventario, ventas, caja y reportes.
-- Administrador puede gestionar usuarios, configuracion y todo lo operativo.
+- Vendedor puede operar caja, clientes y consultar su turno.
+- Administrador puede gestionar inventario, usuarios, configuracion y todo lo operativo.

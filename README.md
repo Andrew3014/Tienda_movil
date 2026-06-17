@@ -12,7 +12,7 @@ Desarrollar una aplicacion comercial eficiente, escalable y responsiva que permi
 - Registrar ventas rapidas desde una interfaz tipo punto de venta.
 - Preparar el flujo de cobro por QR para el contexto boliviano.
 - Controlar caja diaria, ingresos, ventas y alertas de stock bajo.
-- Integrar autenticacion segura para administradores, gerentes, vendedores, inventario y clientes con Supabase Auth.
+- Integrar autenticacion segura para administradores, vendedores y clientes con Supabase Auth.
 - Diseñar una base de datos relacional en PostgreSQL para productos, variantes, clientes, ventas, pagos y movimientos de caja.
 - Aplicar Row Level Security en Supabase para separar permisos por rol.
 - Mantener una interfaz responsiva para Web, Android e iOS.
@@ -39,11 +39,9 @@ Los datos actuales son locales y sirven como base visual y funcional. La siguien
 
 | Rol | Uso profesional | Acceso |
 | --- | --- | --- |
-| Administrador | Dueño o responsable tecnico | Usuarios, configuracion, inventario, ventas, caja y reportes |
-| Gerente | Responsable de boutique | Inventario, ventas, caja y reportes |
-| Vendedor/Cajero | Personal de atencion | Catalogo, ventas rapidas, QR y caja operativa |
-| Inventario | Encargado de stock | Productos, variantes, tallas, colores y reportes de stock |
-| Cliente | Comprador final | Catalogo y pedidos propios |
+| Administrador | Dueno del emprendimiento | Usuarios, configuracion, inventario, ventas, caja y reportes |
+| Vendedor/Cajero | Personal de atencion | Catalogo, ventas rapidas, QR, clientes, caja y reporte de turno |
+| Cliente | Comprador final | Catalogo, carrito, perfil y pedidos propios |
 
 Las cuentas de prueba estan documentadas en `docs/testing_accounts.md`.
 
@@ -65,6 +63,7 @@ test/
 docs/
   supabase_schema.sql       Esquema inicial propuesto para Supabase
   supabase_setup.md         Guia para crear Supabase y usuarios de prueba
+  supabase_three_roles_migration.sql Migracion del proyecto actual a tres roles
   testing_accounts.md       Cuentas, permisos y pruebas de login
 ```
 

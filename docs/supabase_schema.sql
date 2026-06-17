@@ -3,7 +3,7 @@
 
 create extension if not exists "pgcrypto";
 
-create type public.user_role as enum ('admin', 'manager', 'seller', 'inventory', 'customer');
+create type public.user_role as enum ('admin', 'seller', 'customer');
 create type public.payment_method as enum ('cash', 'qr', 'card', 'transfer');
 create type public.sale_status as enum ('draft', 'paid', 'cancelled');
 create type public.cash_movement_type as enum ('opening', 'income', 'expense', 'closing');
@@ -122,7 +122,7 @@ $$;
 
 create policy "profiles_read_own_or_staff"
 on public.profiles for select
-using (id = auth.uid() or public.current_user_role() in ('admin', 'manager', 'seller', 'inventory'));
+using (id = auth.uid() or public.current_user_role() in ('admin', 'seller'));
 
 create policy "admin_manage_profiles"
 on public.profiles for all
@@ -143,44 +143,96 @@ using (true);
 
 create policy "staff_manage_categories"
 on public.categories for all
-using (public.current_user_role() in ('admin', 'manager', 'inventory'))
-with check (public.current_user_role() in ('admin', 'manager', 'inventory'));
+using (public.current_user_role() = 'admin')
+with check (public.current_user_role() = 'admin');
 
 create policy "staff_manage_products"
 on public.products for all
-using (public.current_user_role() in ('admin', 'manager', 'inventory'))
-with check (public.current_user_role() in ('admin', 'manager', 'inventory'));
+using (public.current_user_role() = 'admin')
+with check (public.current_user_role() = 'admin');
 
 create policy "staff_manage_variants"
 on public.product_variants for all
-using (public.current_user_role() in ('admin', 'manager', 'inventory'))
-with check (public.current_user_role() in ('admin', 'manager', 'inventory'));
+using (public.current_user_role() = 'admin')
+with check (public.current_user_role() = 'admin');
 
 create policy "customers_read_own_sales"
 on public.sales for select
-using (customer_id = auth.uid() or public.current_user_role() in ('admin', 'manager', 'seller'));
+using (customer_id = auth.uid() or public.current_user_role() in ('admin', 'seller'));
 
 create policy "staff_manage_sales"
 on public.sales for all
-using (public.current_user_role() in ('admin', 'manager', 'seller'))
-with check (public.current_user_role() in ('admin', 'manager', 'seller'));
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
+
+create policy "customer_create_own_sales"
+on public.sales for insert
+with check (customer_id = auth.uid() and status = 'draft');
+
+create policy "customer_update_own_draft_sales"
+on public.sales for update
+using (customer_id = auth.uid() and status = 'draft')
+with check (customer_id = auth.uid() and status = 'draft');
 
 create policy "staff_manage_sale_items"
 on public.sale_items for all
-using (public.current_user_role() in ('admin', 'manager', 'seller'))
-with check (public.current_user_role() in ('admin', 'manager', 'seller'));
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
+
+create policy "customer_read_own_sale_items"
+on public.sale_items for select
+using (
+  exists (
+    select 1
+    from public.sales
+    where sales.id = sale_items.sale_id
+      and sales.customer_id = auth.uid()
+  )
+);
+
+create policy "customer_manage_own_draft_sale_items"
+on public.sale_items for all
+using (
+  exists (
+    select 1
+    from public.sales
+    where sales.id = sale_items.sale_id
+      and sales.customer_id = auth.uid()
+      and sales.status = 'draft'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.sales
+    where sales.id = sale_items.sale_id
+      and sales.customer_id = auth.uid()
+      and sales.status = 'draft'
+  )
+);
 
 create policy "staff_manage_payments"
 on public.payments for all
-using (public.current_user_role() in ('admin', 'manager', 'seller'))
-with check (public.current_user_role() in ('admin', 'manager', 'seller'));
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
+
+create policy "customer_read_own_payments"
+on public.payments for select
+using (
+  exists (
+    select 1
+    from public.sales
+    where sales.id = payments.sale_id
+      and sales.customer_id = auth.uid()
+  )
+);
 
 create policy "staff_manage_cash_registers"
 on public.cash_registers for all
-using (public.current_user_role() in ('admin', 'manager', 'seller'))
-with check (public.current_user_role() in ('admin', 'manager', 'seller'));
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
 
 create policy "staff_manage_cash_movements"
 on public.cash_movements for all
-using (public.current_user_role() in ('admin', 'manager', 'seller'))
-with check (public.current_user_role() in ('admin', 'manager', 'seller'));
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));

@@ -433,7 +433,35 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
         _MetricGrid(role: _activeAccount.role),
         const SizedBox(height: 16),
       ],
-      if (isWide)
+      if (_activeAccount.role == AccountRole.customer)
+        if (isWide)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 7,
+                child: _CatalogPanel(
+                  products: DemoData.products,
+                  canManage: false,
+                  canSell: false,
+                  canShop: true,
+                ),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(flex: 4, child: _CustomerPanel()),
+            ],
+          )
+        else ...[
+          _CatalogPanel(
+            products: DemoData.products,
+            canManage: false,
+            canSell: false,
+            canShop: true,
+          ),
+          const SizedBox(height: 16),
+          const _CustomerPanel(),
+        ]
+      else if (isWide)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -443,6 +471,7 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
                 products: DemoData.products,
                 canManage: permissions.canManageInventory,
                 canSell: permissions.canCreateSales,
+                canShop: false,
               ),
             ),
             const SizedBox(width: 16),
@@ -467,6 +496,7 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
           products: DemoData.products,
           canManage: permissions.canManageInventory,
           canSell: permissions.canCreateSales,
+          canShop: false,
         ),
         const SizedBox(height: 16),
         _SalePanel(
@@ -685,16 +715,19 @@ class _MetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final metrics = [
-      const Metric('Caja abierta', 'Bs 1.245', Icons.point_of_sale),
-      const Metric('Ventas hoy', '18', Icons.receipt_long),
-      const Metric('Stock bajo', '7 variantes', Icons.inventory_2),
-      Metric(
-        role == AccountRole.customer ? 'Mis pedidos' : 'Pagos QR',
-        role == AccountRole.customer ? '3 activos' : '6 pagos',
-        role == AccountRole.customer ? Icons.shopping_bag : Icons.qr_code,
-      ),
-    ];
+    final metrics = role == AccountRole.customer
+        ? const [
+            Metric('Catalogo', '24 prendas', Icons.storefront),
+            Metric('Mi carrito', '1 producto', Icons.shopping_bag),
+            Metric('Mis pedidos', '2 pedidos', Icons.receipt_long),
+            Metric('En preparacion', '1 pedido', Icons.local_shipping_outlined),
+          ]
+        : const [
+            Metric('Caja abierta', 'Bs 1.245', Icons.point_of_sale),
+            Metric('Ventas hoy', '18', Icons.receipt_long),
+            Metric('Stock bajo', '7 variantes', Icons.inventory_2),
+            Metric('Pagos QR', '6 pagos', Icons.qr_code),
+          ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -771,11 +804,13 @@ class _CatalogPanel extends StatelessWidget {
     required this.products,
     required this.canManage,
     required this.canSell,
+    required this.canShop,
   });
 
   final List<Product> products;
   final bool canManage;
   final bool canSell;
+  final bool canShop;
 
   @override
   Widget build(BuildContext context) {
@@ -796,6 +831,7 @@ class _CatalogPanel extends StatelessWidget {
               product: product,
               canManage: canManage,
               canSell: canSell,
+              canShop: canShop,
             ),
             if (product != products.last) const Divider(height: 18),
           ],
@@ -838,11 +874,13 @@ class _ProductTile extends StatelessWidget {
     required this.product,
     required this.canManage,
     required this.canSell,
+    required this.canShop,
   });
 
   final Product product;
   final bool canManage;
   final bool canSell;
+  final bool canShop;
 
   @override
   Widget build(BuildContext context) {
@@ -921,9 +959,12 @@ class _ProductTile extends StatelessWidget {
                     icon: const Icon(Icons.tune, size: 18),
                   ),
                   IconButton.filled(
-                    onPressed: canSell ? () {} : null,
-                    tooltip: 'Agregar a venta',
-                    icon: const Icon(Icons.add_shopping_cart, size: 18),
+                    onPressed: canSell || canShop ? () {} : null,
+                    tooltip: canShop ? 'Agregar al carrito' : 'Agregar a venta',
+                    icon: Icon(
+                      canShop ? Icons.shopping_bag : Icons.add_shopping_cart,
+                      size: 18,
+                    ),
                   ),
                 ],
               ),
@@ -1024,6 +1065,80 @@ class _SalePanel extends StatelessWidget {
   }
 }
 
+class _CustomerPanel extends StatelessWidget {
+  const _CustomerPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        _Panel(
+          title: 'Mi carrito',
+          subtitle: 'Productos seleccionados para comprar.',
+          action: const _RoleBadge(role: AccountRole.customer),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: _IconBox(icon: Icons.checkroom),
+                title: Text('Blazer lino premium'),
+                subtitle: Text('Talla M · Azul petroleo'),
+                trailing: Text(
+                  'Bs 325',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              const Divider(height: 22),
+              const _TotalRow(label: 'Total', value: 325, isStrong: true),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.shopping_bag),
+                label: const Text('Continuar pedido'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _Panel(
+          title: 'Mis pedidos',
+          subtitle: 'Seguimiento de compras realizadas.',
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const _IconBox(icon: Icons.local_shipping_outlined),
+                title: const Text('Pedido #MT-0018'),
+                subtitle: const Text('Preparando · 2 prendas'),
+                trailing: Text(
+                  'Bs 605',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const Divider(height: 18),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: _IconBox(icon: Icons.check_circle_outline),
+                title: Text('Pedido #MT-0012'),
+                subtitle: Text('Entregado'),
+                trailing: Text(
+                  'Bs 280',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _QrCallout extends StatelessWidget {
   const _QrCallout({required this.enabled});
 
@@ -1104,44 +1219,73 @@ class _OperationsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final permissions = account.role.permissions;
-    final operations = [
-      Operation(
-        'Productos',
-        'Crear prendas, marcas, modelos y variantes.',
-        Icons.inventory_2,
-        permissions.canManageInventory,
-      ),
-      Operation(
-        'Ventas',
-        'Registrar carrito, descuento y comprobante.',
-        Icons.receipt_long,
-        permissions.canCreateSales,
-      ),
-      Operation(
-        'Caja',
-        'Abrir, mover y cerrar caja diaria.',
-        Icons.point_of_sale,
-        permissions.canManageCash,
-      ),
-      Operation(
-        'Clientes',
-        'Consultar historial propio o gestionar clientes.',
-        Icons.people_alt,
-        permissions.canManageUsers || account.role == AccountRole.customer,
-      ),
-      Operation(
-        'Reportes',
-        'Ventas, margen, rotacion y stock bajo.',
-        Icons.bar_chart,
-        permissions.canViewReports,
-      ),
-      Operation(
-        'Configuracion',
-        'Roles, usuarios, sucursales y parametros.',
-        Icons.settings,
-        permissions.canManageSettings,
-      ),
-    ];
+    final operations = account.role == AccountRole.customer
+        ? const [
+            Operation(
+              'Catalogo',
+              'Explorar prendas por categoria, talla y precio.',
+              Icons.storefront,
+              true,
+            ),
+            Operation(
+              'Mi carrito',
+              'Revisar productos y continuar el pedido.',
+              Icons.shopping_bag,
+              true,
+            ),
+            Operation(
+              'Mis pedidos',
+              'Consultar estado e historial de compras.',
+              Icons.receipt_long,
+              true,
+            ),
+            Operation(
+              'Mi perfil',
+              'Actualizar datos personales y contacto.',
+              Icons.person,
+              true,
+            ),
+          ]
+        : [
+            Operation(
+              'Productos',
+              'Crear prendas, marcas, modelos y variantes.',
+              Icons.inventory_2,
+              permissions.canManageInventory,
+            ),
+            Operation(
+              'Ventas',
+              'Registrar carrito, descuento y comprobante.',
+              Icons.receipt_long,
+              permissions.canCreateSales,
+            ),
+            Operation(
+              'Caja',
+              'Abrir, mover y cerrar caja diaria.',
+              Icons.point_of_sale,
+              permissions.canManageCash,
+            ),
+            Operation(
+              'Clientes',
+              'Buscar clientes y consultar compras.',
+              Icons.people_alt,
+              permissions.canCreateSales,
+            ),
+            Operation(
+              'Reportes',
+              account.role == AccountRole.seller
+                  ? 'Consultar ventas y cierre del turno propio.'
+                  : 'Ventas, margen, rotacion y stock bajo.',
+              Icons.bar_chart,
+              permissions.canViewReports,
+            ),
+            Operation(
+              'Configuracion',
+              'Usuarios, sucursales y parametros del negocio.',
+              Icons.settings,
+              permissions.canManageSettings,
+            ),
+          ];
 
     return _Panel(
       title: 'Funcionalidad por rol',
@@ -1241,15 +1385,15 @@ class _SupabaseNextSteps extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const steps = [
-      'Crear proyecto Supabase y guardar URL/anon key.',
-      'Ejecutar docs/supabase_schema.sql en SQL Editor.',
-      'Crear usuarios de prueba en Auth y asignar profiles.role.',
-      'Conectar Flutter con supabase_flutter y variables de entorno.',
+      'Proyecto Supabase y Flutter conectados.',
+      'Tres usuarios creados: admin, vendedor y cliente.',
+      'Ejecutar supabase_three_roles_migration.sql.',
+      'Siguiente fase: productos, ventas y pedidos con datos reales.',
     ];
 
     return _Panel(
-      title: 'Preparacion Supabase',
-      subtitle: 'Checklist para pasar de demo local a login real.',
+      title: 'Estado Supabase',
+      subtitle: 'Checklist de integracion del backend.',
       child: Wrap(
         spacing: 10,
         runSpacing: 10,
@@ -1471,25 +1615,11 @@ class DemoData {
           'Acceso total: usuarios, inventario, ventas, caja, reportes y configuracion.',
     ),
     TestAccount(
-      name: 'Gerente Boutique',
-      email: 'gerente@mitienda.bo',
-      role: AccountRole.manager,
-      description:
-          'Gestiona ventas, inventario, caja y reportes, sin administrar roles criticos.',
-    ),
-    TestAccount(
       name: 'Vendedora Caja',
       email: 'ventas@mitienda.bo',
       role: AccountRole.seller,
       description:
           'Opera ventas rapidas, cobros QR y consulta catalogo disponible.',
-    ),
-    TestAccount(
-      name: 'Encargado Stock',
-      email: 'stock@mitienda.bo',
-      role: AccountRole.inventory,
-      description:
-          'Actualiza prendas, variantes, tallas, colores y niveles de stock.',
     ),
     TestAccount(
       name: 'Cliente Demo',
@@ -1566,15 +1696,13 @@ class DemoData {
   ];
 }
 
-enum AccountRole { admin, manager, seller, inventory, customer }
+enum AccountRole { admin, seller, customer }
 
 extension AccountRoleInfo on AccountRole {
   String get label {
     return switch (this) {
       AccountRole.admin => 'Administrador',
-      AccountRole.manager => 'Gerente',
       AccountRole.seller => 'Vendedor/Cajero',
-      AccountRole.inventory => 'Inventario',
       AccountRole.customer => 'Cliente',
     };
   }
@@ -1582,9 +1710,7 @@ extension AccountRoleInfo on AccountRole {
   IconData get icon {
     return switch (this) {
       AccountRole.admin => Icons.admin_panel_settings,
-      AccountRole.manager => Icons.manage_accounts,
       AccountRole.seller => Icons.point_of_sale,
-      AccountRole.inventory => Icons.inventory,
       AccountRole.customer => Icons.person,
     };
   }
@@ -1593,14 +1719,10 @@ extension AccountRoleInfo on AccountRole {
     return switch (this) {
       AccountRole.admin =>
         'Acceso total: usuarios, inventario, ventas, caja, reportes y configuracion.',
-      AccountRole.manager =>
-        'Gestiona ventas, inventario, caja y reportes, sin administrar roles criticos.',
       AccountRole.seller =>
-        'Opera ventas rapidas, cobros QR y consulta catalogo disponible.',
-      AccountRole.inventory =>
-        'Actualiza prendas, variantes, tallas, colores y niveles de stock.',
+        'Opera ventas, cobros QR, caja, clientes y reportes de su turno.',
       AccountRole.customer =>
-        'Visualiza catalogo y sus propios pedidos, sin acceso operativo interno.',
+        'Explora el catalogo, administra su carrito y consulta sus pedidos.',
     };
   }
 
@@ -1615,20 +1737,10 @@ extension AccountRoleInfo on AccountRole {
         canViewReports: true,
         canManageSettings: true,
       ),
-      AccountRole.manager => const RolePermissions(
-        canManageInventory: true,
-        canCreateSales: true,
-        canTakeQrPayments: true,
-        canManageCash: true,
-        canViewReports: true,
-      ),
       AccountRole.seller => const RolePermissions(
         canCreateSales: true,
         canTakeQrPayments: true,
         canManageCash: true,
-      ),
-      AccountRole.inventory => const RolePermissions(
-        canManageInventory: true,
         canViewReports: true,
       ),
       AccountRole.customer => const RolePermissions(),
@@ -1642,9 +1754,7 @@ class AccountRoleParser {
   static AccountRole fromDatabase(String? value) {
     return switch (value) {
       'admin' => AccountRole.admin,
-      'manager' => AccountRole.manager,
       'seller' => AccountRole.seller,
-      'inventory' => AccountRole.inventory,
       'customer' => AccountRole.customer,
       _ => AccountRole.customer,
     };
