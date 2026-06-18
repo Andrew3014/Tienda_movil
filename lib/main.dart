@@ -116,6 +116,8 @@ class _AuthGateState extends State<AuthGate> {
             if (accountSnapshot.hasError || !accountSnapshot.hasData) {
               return _ProfileErrorPage(
                 email: session.user.email ?? 'usuario sin email',
+                error: accountSnapshot.error,
+                onRetry: () => setState(() {}),
               );
             }
 
@@ -339,9 +341,15 @@ class _LoadingPage extends StatelessWidget {
 }
 
 class _ProfileErrorPage extends StatelessWidget {
-  const _ProfileErrorPage({required this.email});
+  const _ProfileErrorPage({
+    required this.email,
+    required this.error,
+    required this.onRetry,
+  });
 
   final String email;
+  final Object? error;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -370,7 +378,31 @@ class _ProfileErrorPage extends StatelessWidget {
                     'El usuario $email existe en Auth, pero todavia no tiene una fila en public.profiles con su rol.',
                     textAlign: TextAlign.center,
                   ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAFAFA),
+                        border: Border.all(color: const Color(0xFFE5E5E5)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        error.toString(),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF737373),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reintentar perfil'),
+                  ),
+                  const SizedBox(height: 8),
                   FilledButton.icon(
                     onPressed: () => Supabase.instance.client.auth.signOut(),
                     icon: const Icon(Icons.logout),
