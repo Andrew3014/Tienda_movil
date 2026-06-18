@@ -4,6 +4,24 @@
 
 begin;
 
+grant usage on schema public to anon, authenticated;
+grant execute on function public.current_user_role() to authenticated;
+
+grant select on public.categories, public.products, public.product_variants
+to anon, authenticated;
+
+grant select, insert, update, delete on
+  public.profiles,
+  public.categories,
+  public.products,
+  public.product_variants,
+  public.cash_registers,
+  public.sales,
+  public.sale_items,
+  public.payments,
+  public.cash_movements
+to authenticated;
+
 insert into public.profiles (id, full_name, role)
 values
   ('8f38d94b-4a9f-4f34-b900-d42e4d0a811d', 'Administrador General', 'admin'),

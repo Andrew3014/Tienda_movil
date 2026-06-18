@@ -120,6 +120,24 @@ as $$
   select role from public.profiles where id = auth.uid()
 $$;
 
+grant usage on schema public to anon, authenticated;
+grant execute on function public.current_user_role() to authenticated;
+
+grant select on public.categories, public.products, public.product_variants
+to anon, authenticated;
+
+grant select, insert, update, delete on
+  public.profiles,
+  public.categories,
+  public.products,
+  public.product_variants,
+  public.cash_registers,
+  public.sales,
+  public.sale_items,
+  public.payments,
+  public.cash_movements
+to authenticated;
+
 create policy "profiles_read_own_or_staff"
 on public.profiles for select
 using (id = auth.uid() or public.current_user_role() in ('admin', 'seller'));

@@ -1,6 +1,24 @@
 -- Reparacion directa de perfiles para los tres usuarios existentes.
 -- Busca los UUID por email, crea/actualiza profiles y verifica el resultado.
 
+grant usage on schema public to anon, authenticated;
+grant execute on function public.current_user_role() to authenticated;
+
+grant select on public.categories, public.products, public.product_variants
+to anon, authenticated;
+
+grant select, insert, update, delete on
+  public.profiles,
+  public.categories,
+  public.products,
+  public.product_variants,
+  public.cash_registers,
+  public.sales,
+  public.sale_items,
+  public.payments,
+  public.cash_movements
+to authenticated;
+
 insert into public.profiles (id, full_name, role)
 select id, 'Administrador General', 'admin'::public.user_role
 from auth.users
