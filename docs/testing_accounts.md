@@ -15,7 +15,7 @@ La primera version comercial utiliza tres perfiles simples para boutiques y nuev
 | Modulo | Administrador | Vendedor/Cajero | Cliente |
 | --- | --- | --- | --- |
 | Ver catalogo | Si | Si | Si |
-| Gestionar productos y stock | Si | No | No |
+| Gestionar productos y stock | Si | Si | No |
 | Crear ventas presenciales | Si | Si | No |
 | Cobrar QR | Si | Si | No |
 | Abrir y cerrar caja | Si | Si | No |
@@ -34,7 +34,7 @@ La primera version comercial utiliza tres perfiles simples para boutiques y nuev
 2. Confirmar acceso total a inventario, ventas, caja, reportes y configuracion.
 3. Iniciar como `ventas@mitienda.bo`.
 4. Confirmar acceso a venta rapida, QR, caja, clientes y reporte del turno.
-5. Confirmar que vendedor no puede editar productos, usuarios ni configuracion.
+5. Confirmar que vendedor puede crear/editar prendas, pero no usuarios ni configuracion.
 6. Iniciar como `cliente@mitienda.bo`.
 7. Confirmar que ve catalogo, carrito, pedidos y perfil.
 8. Confirmar que cliente no ve caja, inventario, ventas internas ni reportes.

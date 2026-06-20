@@ -77,3 +77,22 @@ En Android Studio puedes abrir `Run > Edit Configurations` y agregar esos `Addit
 - Vendedor puede crear ventas y registrar pagos QR.
 - Vendedor puede operar caja, clientes y consultar su turno.
 - Administrador puede gestionar inventario, usuarios, configuracion y todo lo operativo.
+
+## 7. Activar catalogo e imagenes
+
+Ejecutar completo en SQL Editor:
+
+```text
+docs/supabase_product_catalog.sql
+```
+
+Luego iniciar sesion como administrador o vendedor:
+
+1. Pulsar `Prenda`.
+2. Completar nombre, marca, modelo, categoria y precio.
+3. Elegir una imagen JPG, PNG o WebP de hasta 5 MB.
+4. Agregar una o mas variantes de talla, color y stock.
+5. Guardar.
+
+La prenda se muestra automaticamente en el catalogo de administrador,
+vendedor y cliente.

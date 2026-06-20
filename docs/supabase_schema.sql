@@ -29,6 +29,7 @@ create table public.products (
   brand text not null,
   model text,
   description text,
+  image_url text,
   base_price numeric(12, 2) not null check (base_price >= 0),
   active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -161,18 +162,60 @@ using (true);
 
 create policy "staff_manage_categories"
 on public.categories for all
-using (public.current_user_role() = 'admin')
-with check (public.current_user_role() = 'admin');
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
 
 create policy "staff_manage_products"
 on public.products for all
-using (public.current_user_role() = 'admin')
-with check (public.current_user_role() = 'admin');
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
 
 create policy "staff_manage_variants"
 on public.product_variants for all
-using (public.current_user_role() = 'admin')
-with check (public.current_user_role() = 'admin');
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'product-images',
+  'product-images',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do nothing;
+
+create policy "public_read_product_images"
+on storage.objects for select
+using (bucket_id = 'product-images');
+
+create policy "staff_upload_product_images"
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'product-images'
+  and public.current_user_role() in ('admin', 'seller')
+);
+
+create policy "staff_update_product_images"
+on storage.objects for update
+to authenticated
+using (
+  bucket_id = 'product-images'
+  and public.current_user_role() in ('admin', 'seller')
+)
+with check (
+  bucket_id = 'product-images'
+  and public.current_user_role() in ('admin', 'seller')
+);
+
+create policy "staff_delete_product_images"
+on storage.objects for delete
+to authenticated
+using (
+  bucket_id = 'product-images'
+  and public.current_user_role() in ('admin', 'seller')
+);
 
 create policy "customers_read_own_sales"
 on public.sales for select

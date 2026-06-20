@@ -63,18 +63,18 @@ with check (public.current_user_role() = 'admin');
 
 create policy "staff_manage_categories"
 on public.categories for all
-using (public.current_user_role() = 'admin')
-with check (public.current_user_role() = 'admin');
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
 
 create policy "staff_manage_products"
 on public.products for all
-using (public.current_user_role() = 'admin')
-with check (public.current_user_role() = 'admin');
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
 
 create policy "staff_manage_variants"
 on public.product_variants for all
-using (public.current_user_role() = 'admin')
-with check (public.current_user_role() = 'admin');
+using (public.current_user_role() in ('admin', 'seller'))
+with check (public.current_user_role() in ('admin', 'seller'));
 
 create policy "customers_read_own_sales"
 on public.sales for select

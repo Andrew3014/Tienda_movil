@@ -47,4 +47,30 @@ void main() {
     expect(AccountRoleParser.fromDatabase('seller'), AccountRole.seller);
     expect(AccountRoleParser.fromDatabase('customer'), AccountRole.customer);
   });
+
+  test('product maps Supabase catalog data with image and variants', () {
+    final product = Product.fromMap({
+      'id': 'product-1',
+      'name': 'Vestido demo',
+      'brand': 'Marca',
+      'model': 'Modelo',
+      'base_price': 250,
+      'image_url': 'https://example.com/vestido.png',
+      'categories': {'name': 'Vestidos'},
+      'product_variants': [
+        {
+          'id': 'variant-1',
+          'size': 'M',
+          'color_name': 'Negro',
+          'stock': 4,
+          'min_stock': 2,
+        },
+      ],
+    });
+
+    expect(product.category, 'Vestidos');
+    expect(product.imageUrl, 'https://example.com/vestido.png');
+    expect(product.variants.single.colorName, 'Negro');
+    expect(product.variants.single.stock, 4);
+  });
 }

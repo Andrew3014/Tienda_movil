@@ -25,6 +25,11 @@ La version actual implementa una interfaz neutra inspirada en shadcn:
 - Selector de cuenta de prueba.
 - Login real preparado con Supabase Auth.
 - Matriz visual de permisos por rol.
+- Catalogo real cargado desde Supabase.
+- Alta y edicion de prendas para administrador y vendedor.
+- Imagen JPG, PNG o WebP almacenada en Supabase Storage.
+- Variantes multiples por talla, color y stock.
+- Filtros por categoria y stock bajo.
 - Panel de metricas.
 - Catalogo con productos de ejemplo.
 - Variantes de inventario por talla y color.
@@ -64,7 +69,9 @@ docs/
   supabase_schema.sql       Esquema inicial propuesto para Supabase
   supabase_setup.md         Guia para crear Supabase y usuarios de prueba
   supabase_three_roles_migration.sql Migracion del proyecto actual a tres roles
+  supabase_product_catalog.sql Catalogo, imagenes y permisos de productos
   testing_accounts.md       Cuentas, permisos y pruebas de login
+  demo_status.md            Funciones conectadas y siguientes fases
 ```
 
 ## Ejecucion local
@@ -108,6 +115,16 @@ Si Android Studio no reconoce Flutter, revisar que el SDK este configurado en `S
 5. Guardar `SUPABASE_URL` y `SUPABASE_ANON_KEY`.
 6. Ejecutar la app e iniciar sesion con las cuentas creadas.
 7. Mantener el modo demo solo para pruebas visuales locales.
+
+Para activar catalogo e imagenes en un proyecto Supabase existente, ejecutar
+completo en SQL Editor:
+
+```text
+docs/supabase_product_catalog.sql
+```
+
+El script crea el bucket publico `product-images`, agrega `image_url` a
+`products` y permite que administrador y vendedor gestionen prendas y stock.
 
 ## Proximas tareas
 
