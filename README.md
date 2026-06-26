@@ -31,14 +31,19 @@ La version actual implementa una interfaz neutra inspirada en shadcn:
 - Variantes multiples por talla, color y stock.
 - Filtros por categoria y stock bajo.
 - Panel de metricas.
+- Venta real mediante RPC: crea `sales`, `sale_items`, `payments` y descuenta stock.
+- Pedido real del cliente desde carrito.
+- Apertura y cierre de caja.
+- Reportes contables con graficas simples: diario, mensual, anual y metodos de pago.
+- Datos demo con imagenes remotas de prendas para presentacion.
 - Catalogo con productos de ejemplo.
 - Variantes de inventario por talla y color.
 - Informacion de marca y modelo por prenda.
-- Venta rapida con resumen de carrito y total.
-- Bloque visual para cobro QR.
+- Venta rapida con resumen de carrito, total y metodo de pago.
+- Bloque visual para cobro QR y registro de pago QR como metodo.
 - Checklist de preparacion Supabase.
 
-Los datos actuales son locales y sirven como base visual y funcional. La siguiente etapa es conectar autenticacion, perfiles y datos reales contra Supabase.
+La app funciona en modo demo local y tambien conectada a Supabase. Para que ventas, caja, reportes, pedidos e imagenes funcionen en Supabase, ejecutar los SQL indicados en la seccion "Plan Supabase".
 
 ## Roles propuestos
 
@@ -70,6 +75,7 @@ docs/
   supabase_setup.md         Guia para crear Supabase y usuarios de prueba
   supabase_three_roles_migration.sql Migracion del proyecto actual a tres roles
   supabase_product_catalog.sql Catalogo, imagenes y permisos de productos
+  supabase_operations_demo.sql Ventas reales, caja, reportes y datos demo
   testing_accounts.md       Cuentas, permisos y pruebas de login
   demo_status.md            Funciones conectadas y siguientes fases
 ```
@@ -126,12 +132,24 @@ docs/supabase_product_catalog.sql
 El script crea el bucket publico `product-images`, agrega `image_url` a
 `products` y permite que administrador y vendedor gestionen prendas y stock.
 
+Para activar ventas reales, pedidos del cliente, apertura/cierre de caja,
+reportes y cargar prendas de demostracion con imagenes, ejecutar despues:
+
+```text
+docs/supabase_operations_demo.sql
+```
+
+Ese script agrega funciones RPC para:
+
+- `boutique_confirm_sale`: registra venta pagada, items, pago y descuenta stock.
+- `boutique_create_customer_order`: registra pedido del cliente y reserva stock.
+- `boutique_open_register` / `boutique_close_register`: control de caja.
+- `boutique_dashboard_summary`: datos de reportes diario, mensual y anual.
+
 ## Proximas tareas
 
 - Separar modelos, servicios y pantallas en carpetas por responsabilidad.
-- Agregar `supabase_flutter`.
-- Implementar autenticacion real.
-- Crear CRUD de productos y variantes.
-- Implementar registro real de ventas y movimientos de caja.
-- Generar QR de pago y registrar estado del cobro.
-- Agregar reportes de ventas, margen y stock bajo.
+- Agregar flujo para aprobar pedidos pendientes del cliente.
+- Agregar egresos manuales de caja.
+- Generar QR bancario dinamico cuando se defina proveedor/banco en Bolivia.
+- Agregar reportes de margen cuando se registre costo por producto.

@@ -12,6 +12,12 @@
 - Desactivacion de prendas.
 - Imagenes en Supabase Storage.
 - Lectura publica del catalogo para clientes.
+- Ventas reales con `boutique_confirm_sale`.
+- Pedidos reales de cliente con `boutique_create_customer_order`.
+- Descuento de stock transaccional.
+- Apertura y cierre de caja.
+- Reportes calculados desde Supabase.
+- Prendas demo con imagenes remotas.
 
 ## Funcional durante la sesion
 
@@ -21,29 +27,26 @@
 - Limpiar una venta.
 - Vista de total.
 - Dialogo de preparacion de cobro QR.
-
-Estos datos de carrito se mantienen mientras la app esta abierta, pero todavia
-no se guardan en Supabase.
+- Confirmar venta por efectivo, QR o tarjeta.
+- Confirmar pedido desde cuenta cliente.
 
 ## Siguiente fase de backend
 
-- Confirmar venta y crear filas en `sales`, `sale_items` y `payments`.
-- Descontar stock de manera transaccional.
-- Apertura y cierre real de caja.
-- Movimientos de ingreso/egreso.
-- Pedidos reales del cliente.
-- Reportes calculados desde la base de datos.
 - Integracion bancaria para generar QR dinamico en Bolivia.
 - Gestion de usuarios desde la interfaz del administrador.
+- Aprobacion/cancelacion de pedidos pendientes.
+- Egresos manuales de caja.
+- Reportes de margen cuando exista costo de compra por prenda.
 
 ## Checklist para demostrar
 
 1. Ejecutar `docs/supabase_product_catalog.sql`.
-2. Iniciar como administrador.
-3. Crear una prenda con imagen y dos variantes.
-4. Confirmar que aparece en el catalogo.
-5. Editar stock y verificar el cambio.
-6. Iniciar como vendedor y agregar la prenda a venta.
-7. Abrir el dialogo QR.
-8. Iniciar como cliente y agregar la prenda al carrito.
-9. Verificar filtros y total del carrito.
+2. Ejecutar `docs/supabase_operations_demo.sql`.
+3. Iniciar como administrador.
+4. Abrir caja con monto inicial.
+5. Confirmar que aparecen prendas demo con imagenes.
+6. Crear o editar una prenda con imagen y variantes.
+7. Agregar una prenda a venta y confirmar pago QR o efectivo.
+8. Verificar que el stock baja.
+9. Revisar reportes diario, mensual y anual.
+10. Iniciar como cliente, agregar al carrito y confirmar pedido.

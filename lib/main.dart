@@ -510,9 +510,14 @@ class BoutiqueHomePage extends StatefulWidget {
 class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
   late TestAccount _activeAccount;
   late ProductRepository _productRepository;
+  late OperationalRepository _operationalRepository;
   List<Product> _products = DemoData.products;
   List<SaleLine> _cart = [];
+  DashboardSummary _summary = DashboardSummary.demo;
+  List<CustomerOrder> _orders = DemoData.orders;
+  CashRegisterStatus? _cashRegister;
   bool _catalogLoading = false;
+  bool _operationsLoading = false;
   String? _catalogError;
 
   @override
@@ -521,7 +526,9 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
     _activeAccount = widget._initialAccount ?? DemoData.accounts.first;
     if (!widget._demoMode) {
       _productRepository = ProductRepository();
+      _operationalRepository = OperationalRepository();
       _loadProducts();
+      _loadOperations();
     }
   }
 
@@ -542,6 +549,35 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
       if (mounted) {
         setState(() => _catalogLoading = false);
       }
+    }
+  }
+
+  Future<void> _loadOperations() async {
+    if (widget._demoMode) return;
+    setState(() => _operationsLoading = true);
+
+    try {
+      final results = await Future.wait([
+        _operationalRepository.fetchDashboardSummary(),
+        _activeAccount.role == AccountRole.customer
+            ? _operationalRepository.fetchMyOrders()
+            : Future<List<CustomerOrder>>.value(const []),
+        _activeAccount.role.permissions.canManageCash
+            ? _operationalRepository.fetchOpenCashRegister()
+            : Future<CashRegisterStatus?>.value(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _summary = results[0] as DashboardSummary;
+        _orders = results[1] as List<CustomerOrder>;
+        _cashRegister = results[2] as CashRegisterStatus?;
+      });
+    } catch (error) {
+      if (mounted) {
+        _showMessage('No se pudo cargar reportes/caja: $error', error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _operationsLoading = false);
     }
   }
 
@@ -625,26 +661,43 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
 
     final variant = available.first;
     final existingIndex = _cart.indexWhere(
-      (item) => item.product == product.name && item.size == variant.size,
+      (item) => item.variantId == variant.id,
     );
 
     setState(() {
       if (existingIndex == -1) {
         _cart.add(
           SaleLine(
+            productId: product.id,
+            variantId: variant.id,
             product: product.name,
             size: variant.size,
+            colorName: variant.colorName,
             quantity: 1,
+            unitPrice: product.price,
             total: product.price,
+            imageUrl: product.imageUrl,
           ),
         );
       } else {
         final current = _cart[existingIndex];
+        if (current.quantity >= variant.stock) {
+          _showMessage(
+            'No hay mas stock disponible para esa talla.',
+            error: true,
+          );
+          return;
+        }
         _cart[existingIndex] = SaleLine(
+          productId: current.productId,
+          variantId: current.variantId,
           product: current.product,
           size: current.size,
+          colorName: current.colorName,
           quantity: current.quantity + 1,
+          unitPrice: current.unitPrice,
           total: current.total + product.price,
+          imageUrl: current.imageUrl,
         );
       }
     });
@@ -655,6 +708,138 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
   void _clearCart() {
     setState(() => _cart = []);
     _showMessage('Carrito limpio.');
+  }
+
+  Future<void> _confirmStaffSale(PaymentMethod method) async {
+    if (_cart.isEmpty) {
+      _showMessage('Agrega productos antes de confirmar.', error: true);
+      return;
+    }
+    if (widget._demoMode) {
+      _showMessage(
+        'Venta demo confirmada. Con Supabase se descuenta stock real.',
+      );
+      _clearCart();
+      return;
+    }
+
+    try {
+      await _operationalRepository.confirmSale(cart: _cart, method: method);
+      _clearCart();
+      await Future.wait([_loadProducts(), _loadOperations()]);
+      if (mounted) {
+        _showMessage('Venta guardada y stock descontado.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage('No se pudo confirmar venta: $error', error: true);
+      }
+    }
+  }
+
+  Future<void> _confirmCustomerOrder() async {
+    if (_cart.isEmpty) {
+      _showMessage('Agrega una prenda antes de continuar.', error: true);
+      return;
+    }
+    if (widget._demoMode) {
+      _showMessage(
+        'Pedido demo preparado. Con Supabase se guarda en Mis pedidos.',
+      );
+      return;
+    }
+
+    try {
+      await _operationalRepository.createCustomerOrder(cart: _cart);
+      _clearCart();
+      await Future.wait([_loadProducts(), _loadOperations()]);
+      if (mounted) {
+        _showMessage('Pedido registrado. La tienda lo vera como pendiente.');
+      }
+    } catch (error) {
+      if (mounted) _showMessage('No se pudo crear pedido: $error', error: true);
+    }
+  }
+
+  Future<void> _openCashRegister() async {
+    if (widget._demoMode) {
+      _showMessage('Caja demo abierta.');
+      return;
+    }
+
+    final amount = await _askAmount(
+      title: 'Abrir caja',
+      label: 'Monto inicial en Bs',
+      action: 'Abrir',
+    );
+    if (amount == null) return;
+
+    try {
+      await _operationalRepository.openCashRegister(amount);
+      await _loadOperations();
+      if (mounted) _showMessage('Caja abierta.');
+    } catch (error) {
+      if (mounted) _showMessage('No se pudo abrir caja: $error', error: true);
+    }
+  }
+
+  Future<void> _closeCashRegister() async {
+    if (widget._demoMode) {
+      _showMessage('Caja demo cerrada.');
+      return;
+    }
+
+    final amount = await _askAmount(
+      title: 'Cerrar caja',
+      label: 'Monto contado en Bs',
+      action: 'Cerrar',
+    );
+    if (amount == null) return;
+
+    try {
+      await _operationalRepository.closeCashRegister(amount);
+      await _loadOperations();
+      if (mounted) _showMessage('Caja cerrada.');
+    } catch (error) {
+      if (mounted) _showMessage('No se pudo cerrar caja: $error', error: true);
+    }
+  }
+
+  Future<double?> _askAmount({
+    required String title,
+    required String label,
+    required String action,
+  }) async {
+    final controller = TextEditingController();
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final amount = double.tryParse(controller.text.trim());
+              if (amount != null) Navigator.pop(context, amount);
+            },
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 
   @override
@@ -674,7 +859,7 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
       _RoleSummary(account: _activeAccount),
       const SizedBox(height: 16),
       if (permissions.canViewMetrics) ...[
-        _MetricGrid(role: _activeAccount.role),
+        _MetricGrid(role: _activeAccount.role, summary: _summary, cart: _cart),
         const SizedBox(height: 16),
       ],
       if (_activeAccount.role == AccountRole.customer)
@@ -703,12 +888,8 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
                 flex: 4,
                 child: _CustomerPanel(
                   cart: _cart,
-                  onContinue: () => _showMessage(
-                    _cart.isEmpty
-                        ? 'Agrega una prenda antes de continuar.'
-                        : 'Pedido listo para confirmar.',
-                    error: _cart.isEmpty,
-                  ),
+                  orders: _orders,
+                  onContinue: _confirmCustomerOrder,
                 ),
               ),
             ],
@@ -730,12 +911,8 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
           const SizedBox(height: 16),
           _CustomerPanel(
             cart: _cart,
-            onContinue: () => _showMessage(
-              _cart.isEmpty
-                  ? 'Agrega una prenda antes de continuar.'
-                  : 'Pedido listo para confirmar.',
-              error: _cart.isEmpty,
-            ),
+            orders: _orders,
+            onContinue: _confirmCustomerOrder,
           ),
         ]
       else if (isWide)
@@ -774,14 +951,18 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
                     canSell: permissions.canCreateSales,
                     canTakeQr: permissions.canTakeQrPayments,
                     onNewSale: _clearCart,
-                    onConfirm: () => _showMessage(
-                      _cart.isEmpty
-                          ? 'Agrega productos antes de confirmar.'
-                          : 'Venta lista para guardarse en la siguiente fase.',
-                      error: _cart.isEmpty,
-                    ),
+                    onConfirm: _confirmStaffSale,
                   ),
                   const SizedBox(height: 16),
+                  if (permissions.canManageCash) ...[
+                    _CashPanel(
+                      status: _cashRegister,
+                      loading: _operationsLoading,
+                      onOpen: _openCashRegister,
+                      onClose: _closeCashRegister,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   _AccessPanel(account: _activeAccount),
                 ],
               ),
@@ -814,17 +995,25 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
           canSell: permissions.canCreateSales,
           canTakeQr: permissions.canTakeQrPayments,
           onNewSale: _clearCart,
-          onConfirm: () => _showMessage(
-            _cart.isEmpty
-                ? 'Agrega productos antes de confirmar.'
-                : 'Venta lista para guardarse en la siguiente fase.',
-            error: _cart.isEmpty,
-          ),
+          onConfirm: _confirmStaffSale,
         ),
         const SizedBox(height: 16),
+        if (permissions.canManageCash) ...[
+          _CashPanel(
+            status: _cashRegister,
+            loading: _operationsLoading,
+            onOpen: _openCashRegister,
+            onClose: _closeCashRegister,
+          ),
+          const SizedBox(height: 16),
+        ],
         _AccessPanel(account: _activeAccount),
       ],
       const SizedBox(height: 16),
+      if (permissions.canViewReports) ...[
+        _ReportsPanel(summary: _summary, loading: _operationsLoading),
+        const SizedBox(height: 16),
+      ],
       _OperationsGrid(account: _activeAccount),
       const SizedBox(height: 16),
       const _SupabaseNextSteps(),
@@ -1026,24 +1215,58 @@ class _RoleSummary extends StatelessWidget {
 }
 
 class _MetricGrid extends StatelessWidget {
-  const _MetricGrid({required this.role});
+  const _MetricGrid({
+    required this.role,
+    required this.summary,
+    required this.cart,
+  });
 
   final AccountRole role;
+  final DashboardSummary summary;
+  final List<SaleLine> cart;
 
   @override
   Widget build(BuildContext context) {
     final metrics = role == AccountRole.customer
-        ? const [
-            Metric('Catalogo', '24 prendas', Icons.storefront),
-            Metric('Mi carrito', '1 producto', Icons.shopping_bag),
-            Metric('Mis pedidos', '2 pedidos', Icons.receipt_long),
-            Metric('En preparacion', '1 pedido', Icons.local_shipping_outlined),
+        ? [
+            Metric(
+              'Catalogo',
+              '${summary.activeProducts} prendas',
+              Icons.storefront,
+            ),
+            Metric(
+              'Mi carrito',
+              '${cart.length} producto(s)',
+              Icons.shopping_bag,
+            ),
+            Metric(
+              'Mis pedidos',
+              '${summary.customerOrders} pedidos',
+              Icons.receipt_long,
+            ),
+            Metric(
+              'Pendientes',
+              '${summary.pendingOrders} pedido(s)',
+              Icons.local_shipping_outlined,
+            ),
           ]
-        : const [
-            Metric('Caja abierta', 'Bs 1.245', Icons.point_of_sale),
-            Metric('Ventas hoy', '18', Icons.receipt_long),
-            Metric('Stock bajo', '7 variantes', Icons.inventory_2),
-            Metric('Pagos QR', '6 pagos', Icons.qr_code),
+        : [
+            Metric(
+              'Caja hoy',
+              'Bs ${summary.cashToday.toStringAsFixed(0)}',
+              Icons.point_of_sale,
+            ),
+            Metric('Ventas hoy', '${summary.salesToday}', Icons.receipt_long),
+            Metric(
+              'Stock bajo',
+              '${summary.lowStockVariants} variantes',
+              Icons.inventory_2,
+            ),
+            Metric(
+              'Pagos QR',
+              '${summary.qrPaymentsToday} pagos',
+              Icons.qr_code,
+            ),
           ];
 
     return LayoutBuilder(
@@ -1466,7 +1689,7 @@ class _SalePanel extends StatelessWidget {
   final bool canSell;
   final bool canTakeQr;
   final VoidCallback onNewSale;
-  final VoidCallback onConfirm;
+  final ValueChanged<PaymentMethod> onConfirm;
 
   @override
   Widget build(BuildContext context) {
@@ -1513,10 +1736,28 @@ class _SalePanel extends StatelessWidget {
           const SizedBox(height: 16),
           _QrCallout(enabled: canTakeQr),
           const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: canSell ? onConfirm : null,
-            icon: const Icon(Icons.payments),
-            label: const Text('Confirmar venta'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: canSell ? () => onConfirm(PaymentMethod.cash) : null,
+                icon: const Icon(Icons.payments),
+                label: const Text('Efectivo'),
+              ),
+              OutlinedButton.icon(
+                onPressed: canSell && canTakeQr
+                    ? () => onConfirm(PaymentMethod.qr)
+                    : null,
+                icon: const Icon(Icons.qr_code_2),
+                label: const Text('QR'),
+              ),
+              OutlinedButton.icon(
+                onPressed: canSell ? () => onConfirm(PaymentMethod.card) : null,
+                icon: const Icon(Icons.credit_card),
+                label: const Text('Tarjeta'),
+              ),
+            ],
           ),
         ],
       ),
@@ -1525,9 +1766,14 @@ class _SalePanel extends StatelessWidget {
 }
 
 class _CustomerPanel extends StatelessWidget {
-  const _CustomerPanel({required this.cart, required this.onContinue});
+  const _CustomerPanel({
+    required this.cart,
+    required this.orders,
+    required this.onContinue,
+  });
 
   final List<SaleLine> cart;
+  final List<CustomerOrder> orders;
   final VoidCallback onContinue;
 
   @override
@@ -1588,6 +1834,36 @@ class _CustomerPanel extends StatelessWidget {
           subtitle: 'Seguimiento de compras realizadas.',
           child: Column(
             children: [
+              if (orders.isEmpty)
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _IconBox(icon: Icons.receipt_long),
+                  title: Text('Todavia no tienes pedidos reales'),
+                  subtitle: Text('Cuando confirmes el carrito apareceran aqui'),
+                )
+              else
+                for (final order in orders) ...[
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: _IconBox(
+                      icon: order.status == 'paid'
+                          ? Icons.check_circle_outline
+                          : Icons.local_shipping_outlined,
+                    ),
+                    title: Text(order.code),
+                    subtitle: Text(
+                      '${order.statusLabel} - ${order.itemsCount} prenda(s)',
+                    ),
+                    trailing: Text(
+                      'Bs ${order.total.toStringAsFixed(0)}',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (order != orders.last) const Divider(height: 18),
+                ],
+              if (orders.isNotEmpty) const SizedBox(height: 8),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const _IconBox(icon: Icons.local_shipping_outlined),
@@ -1656,6 +1932,243 @@ class _QrCallout extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CashPanel extends StatelessWidget {
+  const _CashPanel({
+    required this.status,
+    required this.loading,
+    required this.onOpen,
+    required this.onClose,
+  });
+
+  final CashRegisterStatus? status;
+  final bool loading;
+  final VoidCallback onOpen;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final isOpen = status != null;
+
+    return _Panel(
+      title: 'Control de caja',
+      subtitle: isOpen
+          ? 'Caja abierta para registrar ventas y cierre.'
+          : 'Abre caja antes de iniciar el turno.',
+      action: loading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              isOpen ? Icons.lock_open : Icons.lock_outline,
+              color: const Color(0xFF171717),
+            ),
+            title: Text(isOpen ? 'Caja abierta' : 'Caja cerrada'),
+            subtitle: Text(
+              isOpen
+                  ? 'Apertura Bs ${status!.openingAmount.toStringAsFixed(0)}'
+                  : 'Registra monto inicial para controlar el efectivo.',
+            ),
+            trailing: Text(
+              isOpen
+                  ? 'Bs ${status!.expectedAmount.toStringAsFixed(0)}'
+                  : 'Bs 0',
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: isOpen || loading ? null : onOpen,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Abrir caja'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: !isOpen || loading ? null : onClose,
+                  icon: const Icon(Icons.stop),
+                  label: const Text('Cerrar caja'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportsPanel extends StatelessWidget {
+  const _ReportsPanel({required this.summary, required this.loading});
+
+  final DashboardSummary summary;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      title: 'Reportes contables',
+      subtitle:
+          'Lectura diaria, mensual y anual para administrador o contador.',
+      action: loading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const _RoleBadge(role: AccountRole.admin),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _ReportValue(label: 'Hoy', value: summary.dailyRevenue),
+              _ReportValue(label: 'Mes', value: summary.monthlyRevenue),
+              _ReportValue(label: 'Ano', value: summary.yearlyRevenue),
+              _ReportValue(label: 'Ticket prom.', value: summary.averageTicket),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _MiniBarChart(
+            title: 'Ventas por periodo',
+            values: [
+              ChartValue('Dia', summary.dailyRevenue),
+              ChartValue('Mes', summary.monthlyRevenue),
+              ChartValue('Ano', summary.yearlyRevenue),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _MiniBarChart(
+            title: 'Metodos de pago hoy',
+            values: [
+              ChartValue('Efectivo', summary.cashPaymentsToday),
+              ChartValue('QR', summary.qrRevenueToday),
+              ChartValue('Tarjeta', summary.cardRevenueToday),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportValue extends StatelessWidget {
+  const _ReportValue({required this.label, required this.value});
+
+  final String label;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 160,
+      child: _Surface(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF737373),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Bs ${value.toStringAsFixed(0)}',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniBarChart extends StatelessWidget {
+  const _MiniBarChart({required this.title, required this.values});
+
+  final String title;
+  final List<ChartValue> values;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = values.fold<double>(
+      0,
+      (max, item) => item.value > max ? item.value : max,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 10),
+        for (final item in values) ...[
+          Row(
+            children: [
+              SizedBox(width: 72, child: Text(item.label)),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = maxValue <= 0
+                        ? 0.0
+                        : constraints.maxWidth * (item.value / maxValue);
+                    return Stack(
+                      children: [
+                        Container(
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F5F5),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        Container(
+                          width: width.clamp(0, constraints.maxWidth),
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF171717),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 82,
+                child: Text(
+                  'Bs ${item.value.toStringAsFixed(0)}',
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          if (item != values.last) const SizedBox(height: 8),
+        ],
+      ],
     );
   }
 }
@@ -2118,10 +2631,12 @@ class DemoData {
       category: 'Blazers',
       price: 325,
       colorName: 'Azul petroleo',
+      imageUrl:
+          'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80',
       variants: const [
-        ProductVariant(size: 'S', stock: 3),
-        ProductVariant(size: 'M', stock: 7),
-        ProductVariant(size: 'L', stock: 2),
+        ProductVariant(id: 'demo-blazer-s', size: 'S', stock: 3),
+        ProductVariant(id: 'demo-blazer-m', size: 'M', stock: 7),
+        ProductVariant(id: 'demo-blazer-l', size: 'L', stock: 2),
       ],
     ),
     Product(
@@ -2131,10 +2646,12 @@ class DemoData {
       category: 'Vestidos',
       price: 280,
       colorName: 'Rosa vino',
+      imageUrl:
+          'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80',
       variants: const [
-        ProductVariant(size: 'XS', stock: 1),
-        ProductVariant(size: 'S', stock: 4),
-        ProductVariant(size: 'M', stock: 5),
+        ProductVariant(id: 'demo-vestido-xs', size: 'XS', stock: 1),
+        ProductVariant(id: 'demo-vestido-s', size: 'S', stock: 4),
+        ProductVariant(id: 'demo-vestido-m', size: 'M', stock: 5),
       ],
     ),
     Product(
@@ -2144,10 +2661,12 @@ class DemoData {
       category: 'Jeans',
       price: 210,
       colorName: 'Grafito',
+      imageUrl:
+          'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=900&q=80',
       variants: const [
-        ProductVariant(size: '36', stock: 5),
-        ProductVariant(size: '38', stock: 8),
-        ProductVariant(size: '40', stock: 3),
+        ProductVariant(id: 'demo-jean-36', size: '36', stock: 5),
+        ProductVariant(id: 'demo-jean-38', size: '38', stock: 8),
+        ProductVariant(id: 'demo-jean-40', size: '40', stock: 3),
       ],
     ),
     Product(
@@ -2157,22 +2676,54 @@ class DemoData {
       category: 'Camisas',
       price: 185,
       colorName: 'Mostaza',
+      imageUrl:
+          'https://images.unsplash.com/photo-1485968579580-b6d095142e6e?auto=format&fit=crop&w=900&q=80',
       variants: const [
-        ProductVariant(size: 'S', stock: 6),
-        ProductVariant(size: 'M', stock: 2),
-        ProductVariant(size: 'L', stock: 1),
+        ProductVariant(id: 'demo-camisa-s', size: 'S', stock: 6),
+        ProductVariant(id: 'demo-camisa-m', size: 'M', stock: 2),
+        ProductVariant(id: 'demo-camisa-l', size: 'L', stock: 1),
       ],
     ),
   ];
 
   static const cart = [
     SaleLine(
+      productId: 'demo-blazer',
+      variantId: 'demo-blazer-m',
       product: 'Blazer lino premium',
       size: 'M',
+      colorName: 'Azul petroleo',
       quantity: 1,
+      unitPrice: 325,
       total: 325,
     ),
-    SaleLine(product: 'Vestido satinado', size: 'S', quantity: 1, total: 280),
+    SaleLine(
+      productId: 'demo-vestido',
+      variantId: 'demo-vestido-s',
+      product: 'Vestido satinado',
+      size: 'S',
+      colorName: 'Rosa vino',
+      quantity: 1,
+      unitPrice: 280,
+      total: 280,
+    ),
+  ];
+
+  static const orders = [
+    CustomerOrder(
+      id: 'demo-order-1',
+      code: '#MT-0018',
+      status: 'draft',
+      itemsCount: 2,
+      total: 605,
+    ),
+    CustomerOrder(
+      id: 'demo-order-2',
+      code: '#MT-0012',
+      status: 'paid',
+      itemsCount: 1,
+      total: 280,
+    ),
   ];
 }
 
@@ -2278,6 +2829,82 @@ class TestAccount {
   final String email;
   final AccountRole role;
   final String description;
+}
+
+class OperationalRepository {
+  OperationalRepository({SupabaseClient? client})
+    : _client = client ?? Supabase.instance.client;
+
+  final SupabaseClient _client;
+
+  Future<DashboardSummary> fetchDashboardSummary() async {
+    final response = await _client.rpc('boutique_dashboard_summary');
+    if (response is List && response.isNotEmpty) {
+      return DashboardSummary.fromMap(response.first as Map<String, dynamic>);
+    }
+    if (response is Map<String, dynamic>) {
+      return DashboardSummary.fromMap(response);
+    }
+    return DashboardSummary.demo;
+  }
+
+  Future<List<CustomerOrder>> fetchMyOrders() async {
+    final response = await _client
+        .from('sales')
+        .select('id,status,total,created_at,sale_items(id)')
+        .eq('customer_id', _client.auth.currentUser!.id)
+        .order('created_at', ascending: false)
+        .limit(10);
+
+    return (response as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .map(CustomerOrder.fromMap)
+        .toList();
+  }
+
+  Future<CashRegisterStatus?> fetchOpenCashRegister() async {
+    final response = await _client.rpc('boutique_open_cash_register');
+    if (response is List && response.isNotEmpty) {
+      return CashRegisterStatus.fromMap(response.first as Map<String, dynamic>);
+    }
+    return null;
+  }
+
+  Future<void> openCashRegister(double openingAmount) async {
+    await _client.rpc(
+      'boutique_open_register',
+      params: {'opening_amount_input': openingAmount},
+    );
+  }
+
+  Future<void> closeCashRegister(double closingAmount) async {
+    await _client.rpc(
+      'boutique_close_register',
+      params: {'closing_amount_input': closingAmount},
+    );
+  }
+
+  Future<void> confirmSale({
+    required List<SaleLine> cart,
+    required PaymentMethod method,
+  }) async {
+    await _client.rpc(
+      'boutique_confirm_sale',
+      params: {
+        'items_input': cart.map((item) => item.toSalePayload()).toList(),
+        'payment_method_input': method.databaseValue,
+      },
+    );
+  }
+
+  Future<void> createCustomerOrder({required List<SaleLine> cart}) async {
+    await _client.rpc(
+      'boutique_create_customer_order',
+      params: {
+        'items_input': cart.map((item) => item.toSalePayload()).toList(),
+      },
+    );
+  }
 }
 
 class ProductRepository {
@@ -2964,16 +3591,34 @@ class ProductDraft {
 
 class SaleLine {
   const SaleLine({
+    required this.productId,
+    required this.variantId,
     required this.product,
     required this.size,
+    required this.colorName,
     required this.quantity,
+    required this.unitPrice,
     required this.total,
+    this.imageUrl,
   });
 
+  final String productId;
+  final String variantId;
   final String product;
   final String size;
+  final String colorName;
   final int quantity;
+  final double unitPrice;
   final double total;
+  final String? imageUrl;
+
+  Map<String, dynamic> toSalePayload() {
+    return {
+      'variant_id': variantId,
+      'quantity': quantity,
+      'unit_price': unitPrice,
+    };
+  }
 }
 
 class Metric {
@@ -2982,6 +3627,152 @@ class Metric {
   final String label;
   final String value;
   final IconData icon;
+}
+
+enum PaymentMethod {
+  cash('cash'),
+  qr('qr'),
+  card('card');
+
+  const PaymentMethod(this.databaseValue);
+
+  final String databaseValue;
+}
+
+class CashRegisterStatus {
+  const CashRegisterStatus({
+    required this.id,
+    required this.openingAmount,
+    required this.expectedAmount,
+  });
+
+  final String id;
+  final double openingAmount;
+  final double expectedAmount;
+
+  factory CashRegisterStatus.fromMap(Map<String, dynamic> map) {
+    return CashRegisterStatus(
+      id: map['id'] as String? ?? '',
+      openingAmount: (map['opening_amount'] as num?)?.toDouble() ?? 0,
+      expectedAmount: (map['expected_amount'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class CustomerOrder {
+  const CustomerOrder({
+    required this.id,
+    required this.code,
+    required this.status,
+    required this.itemsCount,
+    required this.total,
+  });
+
+  final String id;
+  final String code;
+  final String status;
+  final int itemsCount;
+  final double total;
+
+  String get statusLabel {
+    return switch (status) {
+      'paid' => 'Pagado',
+      'cancelled' => 'Cancelado',
+      _ => 'Pendiente',
+    };
+  }
+
+  factory CustomerOrder.fromMap(Map<String, dynamic> map) {
+    final id = map['id'] as String? ?? '';
+    final items = map['sale_items'] as List<dynamic>? ?? const [];
+    return CustomerOrder(
+      id: id,
+      code: '#${id.isEmpty ? 'PEDIDO' : id.substring(0, 8).toUpperCase()}',
+      status: map['status'] as String? ?? 'draft',
+      itemsCount: items.length,
+      total: (map['total'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class ChartValue {
+  const ChartValue(this.label, this.value);
+
+  final String label;
+  final double value;
+}
+
+class DashboardSummary {
+  const DashboardSummary({
+    required this.activeProducts,
+    required this.salesToday,
+    required this.lowStockVariants,
+    required this.qrPaymentsToday,
+    required this.customerOrders,
+    required this.pendingOrders,
+    required this.cashToday,
+    required this.dailyRevenue,
+    required this.monthlyRevenue,
+    required this.yearlyRevenue,
+    required this.averageTicket,
+    required this.cashPaymentsToday,
+    required this.qrRevenueToday,
+    required this.cardRevenueToday,
+  });
+
+  final int activeProducts;
+  final int salesToday;
+  final int lowStockVariants;
+  final int qrPaymentsToday;
+  final int customerOrders;
+  final int pendingOrders;
+  final double cashToday;
+  final double dailyRevenue;
+  final double monthlyRevenue;
+  final double yearlyRevenue;
+  final double averageTicket;
+  final double cashPaymentsToday;
+  final double qrRevenueToday;
+  final double cardRevenueToday;
+
+  static const demo = DashboardSummary(
+    activeProducts: 24,
+    salesToday: 18,
+    lowStockVariants: 7,
+    qrPaymentsToday: 6,
+    customerOrders: 2,
+    pendingOrders: 1,
+    cashToday: 1245,
+    dailyRevenue: 1245,
+    monthlyRevenue: 18340,
+    yearlyRevenue: 94200,
+    averageTicket: 208,
+    cashPaymentsToday: 620,
+    qrRevenueToday: 485,
+    cardRevenueToday: 140,
+  );
+
+  factory DashboardSummary.fromMap(Map<String, dynamic> map) {
+    int intValue(String key) => (map[key] as num?)?.toInt() ?? 0;
+    double money(String key) => (map[key] as num?)?.toDouble() ?? 0;
+
+    return DashboardSummary(
+      activeProducts: intValue('active_products'),
+      salesToday: intValue('sales_today'),
+      lowStockVariants: intValue('low_stock_variants'),
+      qrPaymentsToday: intValue('qr_payments_today'),
+      customerOrders: intValue('customer_orders'),
+      pendingOrders: intValue('pending_orders'),
+      cashToday: money('cash_today'),
+      dailyRevenue: money('daily_revenue'),
+      monthlyRevenue: money('monthly_revenue'),
+      yearlyRevenue: money('yearly_revenue'),
+      averageTicket: money('average_ticket'),
+      cashPaymentsToday: money('cash_payments_today'),
+      qrRevenueToday: money('qr_revenue_today'),
+      cardRevenueToday: money('card_revenue_today'),
+    );
+  }
 }
 
 class Operation {
