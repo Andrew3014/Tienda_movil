@@ -31,60 +31,103 @@ void _showActionMessage(BuildContext context, String message) {
 Future<void> _showQrChargeDialog(BuildContext context) async {
   final amountController = TextEditingController();
   final referenceController = TextEditingController();
+  String selectedBank = 'BNB (Banco Nacional)';
+
+  final banks = [
+    'BNB (Banco Nacional)',
+    'Banco Union',
+    'Mercantil Santa Cruz',
+    'Banco Fassil (Intervenido)',
+    'Banco Sol',
+    'Banco Ganadero',
+    'Banco Economico',
+    'BCP (Banco de Credito)',
+  ];
 
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Cobro QR'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Cobro QR Dinamico'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selectedBank,
+                decoration: const InputDecoration(
+                  labelText: 'Seleccionar Banco',
+                  border: OutlineInputBorder(),
+                ),
+                items: banks.map((bank) {
+                  return DropdownMenuItem(value: bank, child: Text(bank));
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setDialogState(() => selectedBank = value);
+                  }
+                },
               ),
-              decoration: const InputDecoration(
-                labelText: 'Monto en Bs',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Monto en Bs',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: referenceController,
-              decoration: const InputDecoration(
-                labelText: 'Referencia',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: referenceController,
+                decoration: const InputDecoration(
+                  labelText: 'Referencia / Concepto',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Icon(Icons.qr_code_2, size: 110),
-            const Text(
-              'La integracion bancaria generara aqui el QR dinamico.',
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.qr_code_2, size: 120),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Generando QR para $selectedBank...',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (double.tryParse(amountController.text.trim()) == null) return;
+              Navigator.pop(dialogContext);
+              _showActionMessage(
+                context,
+                'Cobro QR ($selectedBank) preparado por ${amountController.text.trim()} Bs.',
+              );
+            },
+            child: const Text('Confirmar Pago'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cerrar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (double.tryParse(amountController.text.trim()) == null) return;
-            Navigator.pop(dialogContext);
-            _showActionMessage(
-              context,
-              'Cobro QR preparado para ${amountController.text.trim()} Bs.',
-            );
-          },
-          child: const Text('Preparar cobro'),
-        ),
-      ],
     ),
   );
 
@@ -1020,6 +1063,17 @@ class _BoutiqueHomePageState extends State<BoutiqueHomePage> {
     ];
 
     return Scaffold(
+      floatingActionButton: _cart.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                _showMessage('Tienes ${_cart.length} producto(s) en tu carrito.');
+              },
+              backgroundColor: const Color(0xFF0A0A0A),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.shopping_bag),
+              label: Text('${_cart.length}'),
+            )
+          : null,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -1372,6 +1426,13 @@ class _CatalogPanel extends StatefulWidget {
 
 class _CatalogPanelState extends State<_CatalogPanel> {
   String _selectedFilter = 'Todo';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1379,6 +1440,13 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       ..removeWhere((item) => item.isEmpty);
     final filters = ['Todo', ...categories, 'Stock bajo'];
     final visibleProducts = widget.products.where((product) {
+      // Filter by search text
+      final query = _searchController.text.toLowerCase();
+      final matchesSearch = product.name.toLowerCase().contains(query) ||
+          product.brand.toLowerCase().contains(query);
+      if (!matchesSearch) return false;
+
+      // Filter by chip selection
       if (_selectedFilter == 'Todo') return true;
       if (_selectedFilter == 'Stock bajo') {
         return product.variants.any((variant) => variant.stock <= 2);
@@ -1401,6 +1469,28 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Buscar por nombre o marca...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 14),
           _FilterBar(
             filters: filters,
             selected: _selectedFilter,
@@ -1488,9 +1578,10 @@ class _ProductTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1500,76 +1591,135 @@ class _ProductTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  product.name,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        product.name,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    if (!isMobile) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        'Bs ${product.price.toStringAsFixed(0)}',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${product.brand} · Modelo ${product.model} · ${product.colorName}',
+                  '${product.brand} · ${product.model} · ${product.colorName}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF737373),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
                     for (final variant in product.variants)
                       _StockPill(variant: variant),
                   ],
                 ),
+                if (isMobile) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Bs ${product.price.toStringAsFixed(0)}',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      _ProductActions(
+                        product: product,
+                        canManage: canManage,
+                        canSell: canSell,
+                        canShop: canShop,
+                        onEdit: onEdit,
+                        onArchive: onArchive,
+                        onAction: onAction,
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'Bs ${product.price.toStringAsFixed(0)}',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                children: [
-                  IconButton.outlined(
-                    onPressed: canManage && onEdit != null
-                        ? () => onEdit!(product)
-                        : null,
-                    tooltip: 'Editar prenda y stock',
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                  ),
-                  IconButton.filled(
-                    onPressed: canSell || canShop
-                        ? () => onAction(product)
-                        : null,
-                    tooltip: canShop ? 'Agregar al carrito' : 'Agregar a venta',
-                    icon: Icon(
-                      canShop ? Icons.shopping_bag : Icons.add_shopping_cart,
-                      size: 18,
-                    ),
-                  ),
-                  if (canManage)
-                    IconButton.outlined(
-                      onPressed: onArchive == null
-                          ? null
-                          : () => onArchive!(product),
-                      tooltip: 'Desactivar prenda',
-                      icon: const Icon(Icons.visibility_off_outlined, size: 18),
-                    ),
-                ],
-              ),
-            ],
-          ),
+          if (!isMobile) ...[
+            const SizedBox(width: 12),
+            _ProductActions(
+              product: product,
+              canManage: canManage,
+              canSell: canSell,
+              canShop: canShop,
+              onEdit: onEdit,
+              onArchive: onArchive,
+              onAction: onAction,
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _ProductActions extends StatelessWidget {
+  const _ProductActions({
+    required this.product,
+    required this.canManage,
+    required this.canSell,
+    required this.canShop,
+    required this.onEdit,
+    required this.onArchive,
+    required this.onAction,
+  });
+
+  final Product product;
+  final bool canManage;
+  final bool canSell;
+  final bool canShop;
+  final ValueChanged<Product>? onEdit;
+  final ValueChanged<Product>? onArchive;
+  final ValueChanged<Product> onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      children: [
+        IconButton.outlined(
+          visualDensity: VisualDensity.compact,
+          onPressed: canManage && onEdit != null ? () => onEdit!(product) : null,
+          tooltip: 'Editar prenda y stock',
+          icon: const Icon(Icons.edit_outlined, size: 18),
+        ),
+        IconButton.filled(
+          visualDensity: VisualDensity.compact,
+          onPressed: canSell || canShop ? () => onAction(product) : null,
+          tooltip: canShop ? 'Agregar al carrito' : 'Agregar a venta',
+          icon: Icon(
+            canShop ? Icons.shopping_bag : Icons.add_shopping_cart,
+            size: 18,
+          ),
+        ),
+        if (canManage)
+          IconButton.outlined(
+            visualDensity: VisualDensity.compact,
+            onPressed: onArchive == null ? null : () => onArchive!(product),
+            tooltip: 'Desactivar prenda',
+            icon: const Icon(Icons.visibility_off_outlined, size: 18),
+          ),
+      ],
     );
   }
 }
@@ -3145,8 +3295,30 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
   }
 
   Future<void> _pickImage() async {
+    final source = await showDialog<ImageSource>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Seleccionar imagen'),
+        content: const Text('¿Desde dónde quieres cargar la foto?'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.pop(context, ImageSource.camera),
+            icon: const Icon(Icons.camera_alt),
+            label: const Text('Cámara'),
+          ),
+          TextButton.icon(
+            onPressed: () => Navigator.pop(context, ImageSource.gallery),
+            icon: const Icon(Icons.photo_library),
+            label: const Text('Galería'),
+          ),
+        ],
+      ),
+    );
+
+    if (source == null) return;
+
     final image = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
+      source: source,
       maxWidth: 1800,
       imageQuality: 88,
     );
